@@ -1,9 +1,6 @@
 # Python 2
 from __future__ import division
 
-# Preprocessing
-from sklearn import preprocessing
-
 # Dataframe
 import pandas as pd
 import numpy as np
@@ -12,30 +9,17 @@ import numpy as np
 import datetime
 from time import time
 
-# Visu
-import matplotlib.pyplot as plt
-
 # The Hashing Trick
+from sklearn import preprocessing
 from sklearn.feature_extraction import FeatureHasher
 
 # Dimension Reduction
 from sklearn.decomposition import TruncatedSVD
 
 # ML
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.model_selection import train_test_split
-from sklearn import neighbors
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import BaggingRegressor
-
-# Scoring
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import cross_val_score
-
-stations = pd.read_csv('data/station.csv')
-trips = pd.read_csv('data/trip_train.csv', parse_dates=['start_date', 'end_date'], infer_datetime_format=True,low_memory=False)
-weather = pd.read_csv('data/weather.csv', parse_dates=['date'], infer_datetime_format=True)
-cities = pd.read_csv('data/cities.csv')
+from sklearn.linear_model import BayesianRidge
+from sklearn.linear_model import LinearRegression
 
 
 def preprocess_data(stations, weather, train_trips, test_trips):
@@ -65,6 +49,7 @@ def preprocess_data(stations, weather, train_trips, test_trips):
 
     return train_data, test_data
 
+
 def the_Hashing_Trick(data, column_labels):
 
     temp = []
@@ -83,6 +68,7 @@ def the_Hashing_Trick(data, column_labels):
 
     return data
 
+
 def data_standarization(train_data, test_data = None):
 
     scaler = preprocessing.StandardScaler().fit(train_data)
@@ -95,6 +81,7 @@ def data_standarization(train_data, test_data = None):
 
     return data
 
+
 def reduce_dimentions_to(data, n_dimensions = 5):
 
     svd = TruncatedSVD(n_components=n_dimensions, n_iter=7, random_state=42)
@@ -102,3 +89,43 @@ def reduce_dimentions_to(data, n_dimensions = 5):
     return svd.fit_transform(data)
 
 
+def impute_values(data, strategy):
+
+    return preprocessing.Imputer(missing_values='NaN', strategy=strategy, axis=0).fit_transform(data)
+
+
+def train_model(x, y):
+    return BayesianRidge(lambda_1=1.e-6, lambda_2=1.e-6, noramilize=True).fit(x, y)
+
+
+#input
+stations = pd.read_csv('data/station.csv')
+trips = pd.read_csv('data/trip.csv', parse_dates=['start_date', 'end_date'], infer_datetime_format=True,low_memory=False)
+weather = pd.read_csv('data/weather.csv', parse_dates=['date'], infer_datetime_format=True)
+cities = pd.read_csv('data/cities.csv')
+
+trip_train = pd.read_csv('data/trip_train.csv')
+trip_test = pd.read_csv('data/trip_test.csv')
+
+
+train_set, test_set = preprocess_data(stations, weather, trip_train, trip_test)
+
+column_labels = ['start_station_id','end_station_id','subscription_type','city_zip_code','events']
+train_set = the_Hashing_Trick(train_set, column_labels)
+test_set = the_Hashing_Trick(test_set, column_labels)
+
+target_values = train_set['duration']
+train_set.drop(labels='duration', axis=1, inplace=True)
+
+ids = test_set['id']
+trip_test.drop(labels=['id'], axis=1, inplace=True)
+
+train_set = impute_values(train_set)
+test_set = impute_values(test_set)
+
+regressor = train_model(train_set, target_values)
+
+results = pd.DataFrame(data=regressor.predict(trip_test), index=ids).reset_index(inplace=True)
+results.columns = ['id', 'duration']
+
+results.to_csv('results.csv', index=False)
